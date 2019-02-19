@@ -1,21 +1,36 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
-#define POS_X = 0;
-#define POS_Y=1;
-#define MASS = 2;
+#define POS_X  0
+#define POS_Y 1
+#define MASS 2
 
-static const double* pow_2[];
+//declare node structure
+//maybe good idea is to compact it! (ie no padding)
+typedef struct tree_node{
+  double x_lim; //x division (middle point in x)
+  double y_lim; // y division (middle point in y)
+  double width; //width of the box
+  double cm_x;
+  double cm_y; //center of mass of the quadrant
+  double tot_mass; //total mass of the quadrant
+  struct tree_node *left_down; //Q3 child
+  struct tree_node *left_up; //Q2 child
+  struct tree_node *right_down; //Q4 child
+  struct tree_node *right_up; //Q1 child
+}node_t;
+
 void print_qtree(node_t * node);
-void insert(node_t **node, double x_pos, double y_pos, double mass
+void insert(node_t **node, double x_pos, double y_pos, double mass,
    double x_lim_parent, double y_lim_parent, int depth, double* pow_2);
 
-int int main(int argc, char const *args[]){
+int main(int argc, char const *args[]){
 
   if (argc!=7){
     printf("Invalid number of arguments \n");
-    printf("galsim expects: N filename nsteps delta_t theta_max graphics\n", );
+    printf("galsim expects: N filename nsteps delta_t theta_max graphics\n");
     return -1;
   }
   clock_t begin = clock();
@@ -64,28 +79,22 @@ int int main(int argc, char const *args[]){
   for(int i=1; i< K; i++){
     pow_2[i]= pow_2[i-1]/2;
   }
-  //declare node structure
-  //maybe good idea is to compact it! (ie no padding)
-  typedef struct tree_node{
-    double x_lim; //x division (middle point in x)
-    double y_lim; // y division (middle point in y)
-    double width; //width of the box
-    double cm_x;
-    double cm_y; //center of mass of the quadrant
-    double tot_mass; //total mass of the quadrant
-    struct tree_node *left_down; //Q3 child
-    struct tree_node *left_up; //Q2 child
-    struct tree_node *right_down; //Q4 child
-    struct tree_node *right_up; //Q1 child
-  }node_t
 
   node_t * root = NULL;
   // insert particles in quad tree
   //we pass a pointer to the node since we want to
   //modify what node we are using (ie pointing to)
-  printf("inserting nodes in the tree...\n", );
-  for(int i=1; i<N; i++){
-    insert(&root ,arr[0][POS_X], arr[0][POS_Y], arr[0][MASS]);
+  printf("inserting nodes in the tree...\n");
+  for(int i=0; i<N; i++){
+    insert(&root ,arr[i][POS_X], arr[i][POS_Y], arr[i][MASS],
+      0.5, 0.5, 0, pow_2);
+  }
+  clock_t end = clock();
+  printf("Time: %lu \n", end - begin);
+  printf("Particles: \n");
+  for(int i=0; i<N; i++){
+    printf("particle %d: m = %lf, (%lf,%lf) \n", i, arr[i][MASS],
+    arr[i][POS_X], arr[i][POS_Y]);
   }
   printf("Printing tree .. \n");
   print_qtree(root);
@@ -94,20 +103,19 @@ int int main(int argc, char const *args[]){
 
 //modify what node we are using (ie pointing to)
 void insert(node_t **node, double x_pos, double y_pos, double mass,
-  double x_lim_parent, double y_lim_parent, int depth, double* pow_2){
+  double x_lim, double y_lim, int depth, double* pow_2){
   //insert node in tree with given coordinates x and y.
-
   //If node is null create it!
   if((*node) == NULL){
     //allocate mem for new node
     *node = (node_t*)malloc(sizeof(node_t));
     //if right is true, we go 2^(depth) to the right
-    (*node)->x_lim = x_lim_parent + right*pow[depth-1] - pow[depth];
-    (*node)->y_lim =  y_lim_parent + up*pow_2[depth-1] - pow[depth];
+    (*node)->x_lim = x_lim;
+    (*node)->y_lim =  y_lim;
     (*node)-> width = pow_2[depth];
     (*node)-> cm_x = x_pos;
     (*node)-> cm_y = y_pos;
-    (*node)-> total_mass = mass;
+    (*node)-> tot_mass = mass;
     (*node)->left_down = NULL;
     (*node)->left_up = NULL;
     (*node)->right_down = NULL;
@@ -116,34 +124,45 @@ void insert(node_t **node, double x_pos, double y_pos, double mass,
     //We go deeper in the tree
     //depth increase
     depth++;
+    // NOTE: try to paralelize assigments with right and
+    //left variables as u had it before
     //update x_lim, y_lim
-    x_lim_parent = (*node)->x_lim;
-    y_lim_parent = (*node)->y_lim;
+    double x_lim_parent = (*node)->x_lim;
+    double y_lim_parent = (*node)->y_lim;
+    double cm_mass = (*node)->tot_mass;
     //update center of mass new_cm = old_mass*old_cm + pos_new_particle*mass_new_particle
-    (*node)->cm_x += pos_x*(mass/total_mass); // Note: This maybe we can do more efficently
-    (*node)->cm_y += pos_y*(mass/total_mass);
-    (*node)->total_mass+=mass;
+    (*node)->tot_mass+=mass;
+    //we can save operations in here by declaring new varaibles
+    (*node)->cm_x = cm_mass/(*node)->tot_mass * (*node)->cm_x + x_pos*(mass/(*node)->tot_mass); // Note: This maybe we can do more efficently
+    (*node)->cm_y = cm_mass/(*node)->tot_mass* (*node)->cm_y + y_pos*(mass/(*node)->tot_mass);
+
     depth++;
-    if( x_pos > (*node)->x_lim){
-      if(y pos > (*node)->y_lim){
-        //x_pos is bigger than current x_lim so we go to the right
+    if( x_pos > x_lim_parent){
+      //x_pos is bigger than current x_lim so we go to the right
+      x_lim = x_lim_parent + pow_2[depth];
+      if(y_pos > y_lim_parent){
         //y_pos bigger we go up
+        y_lim =  y_lim_parent + pow_2[depth];
         node = &(*node)->right_up;
       }else{
-        node =&(*node)->right_down
+        y_lim =  y_lim_parent - pow_2[depth];
+        node =&(*node)->right_down;
       }
     }else{
-      if(y pos > (*node)->y_lim){
+      x_lim = x_lim_parent - pow_2[depth];
+      if(y_pos > y_lim_parent){
         //x_pos is smaller than current x_lim so we go to the right
         //y_pos bigger we go up
+        y_lim =  y_lim_parent+ pow_2[depth];
         node = &(*node)->left_up;
       }else{
+        y_lim = y_lim_parent - pow_2[depth];
         node= &(*node)->left_down;
       }
     }
+    //call recursively insert with one deeper node
+    insert(node, x_pos, y_pos, mass, x_lim, y_lim, depth, pow_2);
   }
-  //call recursively insert
-  insert(node, x_pos, y_pos, mass, depth, x_lim_parent, y_lim_parent);
   return;
 }
 
@@ -151,14 +170,15 @@ void print_qtree(node_t * node){
   if(node == NULL){printf("Tree is empty \n"); return;}
 
   if(node != NULL){
-    printf("%d, %lf, (%lf, %lf) \t",
-    node->depth, node->total_mass,
-    node->cm_x, node->cm_y);
+    printf("total mass: %lf, cm: (%lf, %lf). limits: (%lf,%lf) \t",
+    node->tot_mass,
+    node->cm_x, node->cm_y,
+    node->x_lim, node->x_lim);
   }
-  if (node->right_up != NULL) printf("Q1: %lf,", node->right_up->total_mass);
-  if (node->left_up != NULL) printf("Q2: %lf,", node->left_up->total_mass);
-  if (node->left_down != NULL) printf("Q3: %lf,", node->left_down->total_mass);
-  if (node->right_down != NULL) printf("Q4: %lf,", node->right_down->total_mass);
+  if (node->right_up != NULL) printf("Q1: total mass %lf,", node->right_up->tot_mass);
+  if (node->left_up != NULL) printf("Q2: total mass: %lf,", node->left_up->tot_mass);
+  if (node->left_down != NULL) printf("Q3: total mass: %lf,", node->left_down->tot_mass);
+  if (node->right_down != NULL) printf("Q4: total mass; %lf,", node->right_down->tot_mass);
   printf("\n");
 
   if (node->right_up != NULL) print_qtree(node->right_up);
