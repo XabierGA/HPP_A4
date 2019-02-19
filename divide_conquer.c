@@ -9,6 +9,13 @@
 
 //declare node structure
 //maybe good idea is to compact it! (ie no padding)
+typedef struct body{
+  double x_pos;
+  double y_pos;
+  double mass;
+  double bright;
+}body_t;
+
 typedef struct tree_node{
   double x_lim; //x division (middle point in x)
   double y_lim; // y division (middle point in y)
@@ -16,6 +23,7 @@ typedef struct tree_node{
   double cm_x;
   double cm_y; //center of mass of the quadrant
   double tot_mass; //total mass of the quadrant
+  struct body *body_node; //body stored in the node
   struct tree_node *left_down; //Q3 child
   struct tree_node *left_up; //Q2 child
   struct tree_node *right_down; //Q4 child
@@ -87,7 +95,7 @@ int main(int argc, char const *args[]){
   printf("inserting nodes in the tree...\n");
   for(int i=0; i<N; i++){
     insert(&root ,arr[i][POS_X], arr[i][POS_Y], arr[i][MASS],
-      0.5, 0.5, 0, pow_2);
+      0.5, 0.5, 1, pow_2);
   }
   clock_t end = clock();
   printf("Time: %lu \n", end - begin);
@@ -107,19 +115,25 @@ void insert(node_t **node, double x_pos, double y_pos, double mass,
   //insert node in tree with given coordinates x and y.
   //If node is null create it!
   if((*node) == NULL){
-    //allocate mem for new node
+
     *node = (node_t*)malloc(sizeof(node_t));
     //if right is true, we go 2^(depth) to the right
     (*node)->x_lim = x_lim;
     (*node)->y_lim =  y_lim;
-    (*node)-> width = pow_2[depth];
+    (*node)-> width = pow_2[depth - 1];
     (*node)-> cm_x = x_pos;
     (*node)-> cm_y = y_pos;
     (*node)-> tot_mass = mass;
+    (*node)->body_node = (body_t*)malloc(sizeof(body_t));
     (*node)->left_down = NULL;
     (*node)->left_up = NULL;
     (*node)->right_down = NULL;
     (*node)->right_up = NULL;
+
+    (*node)->body_node->x_pos = x_pos;
+    (*node)->body_node->y_pos = y_pos;
+    (*node)->body_node->mass = mass;
+
   }else{
     //We go deeper in the tree
     //depth increase
@@ -135,8 +149,6 @@ void insert(node_t **node, double x_pos, double y_pos, double mass,
     //we can save operations in here by declaring new varaibles
     (*node)->cm_x = cm_mass/(*node)->tot_mass * (*node)->cm_x + x_pos*(mass/(*node)->tot_mass); // Note: This maybe we can do more efficently
     (*node)->cm_y = cm_mass/(*node)->tot_mass* (*node)->cm_y + y_pos*(mass/(*node)->tot_mass);
-
-    depth++;
     if( x_pos > x_lim_parent){
       //x_pos is bigger than current x_lim so we go to the right
       x_lim = x_lim_parent + pow_2[depth];
@@ -170,10 +182,11 @@ void print_qtree(node_t * node){
   if(node == NULL){printf("Tree is empty \n"); return;}
 
   if(node != NULL){
-    printf("total mass: %lf, cm: (%lf, %lf). limits: (%lf,%lf) \t",
+    printf("total mass: %lf, cm: (%lf, %lf) limits: (%lf,%lf). body: (%lf, %lf) m- %lf) \t",
     node->tot_mass,
     node->cm_x, node->cm_y,
-    node->x_lim, node->x_lim);
+    node->x_lim, node->x_lim,
+    node->body_node->x_pos, node->body_node->y_pos, node->body_node->mass);
   }
   if (node->right_up != NULL) printf("Q1: total mass %lf,", node->right_up->tot_mass);
   if (node->left_up != NULL) printf("Q2: total mass: %lf,", node->left_up->tot_mass);
