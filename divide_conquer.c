@@ -7,6 +7,10 @@
 #define POS_Y 1
 #define MASS 2
 
+
+/*
+TO DO falta free and delete treee bla bla
+*/
 //declare node structure (X)
 //maybe good idea is to compact it! (ie no padding)
 typedef struct tree_node{
@@ -27,8 +31,9 @@ void print_qtree(node_t* node){
   if(node == NULL){printf("Tree is empty \n"); return;}
 
   if(node != NULL){
-    printf("Depth: %d, total mass: %lf, cm: (%lf, %lf) limits: (%lf,%lf)\t",
+    printf("Depth: %d, id:%d, total mass: %lf, cm: (%lf, %lf) limits: (%lf,%lf)\t",
     node->depth,
+    node->body_id,
     node->tot_mass,
     node->cm_x, node->cm_y,
     node->x_lim, node->y_lim);
@@ -53,6 +58,7 @@ void create_children(node_t* node, double * pow_2){
   printf("Creating RU\n");
   node->right_up=(node_t*)malloc(sizeof(node_t));
   node->right_up->depth = node->depth +1;
+  node->right_up->body_id = -1;
   node->right_up->x_lim = node->x_lim + pow_2[node->right_up->depth];
   node->right_up->y_lim =  node->y_lim + pow_2[node->right_up->depth];
   node->right_up-> width = pow_2[node->depth];
@@ -69,6 +75,7 @@ void create_children(node_t* node, double * pow_2){
   printf("Creating RD\n");
   node->right_down=(node_t*)malloc(sizeof(node_t));
   node->right_down->depth = node->depth +1;
+  node->right_down->body_id = -1;
   node->right_down->x_lim = node->x_lim + pow_2[node->right_down->depth];
   node->right_down->y_lim =  node->y_lim - pow_2[node->right_down->depth];
   node->right_down-> width = pow_2[node->depth];
@@ -86,6 +93,7 @@ void create_children(node_t* node, double * pow_2){
   printf("Creating LU\n");
   node->left_up=(node_t*)malloc(sizeof(node_t));
   node->left_up->depth = node->depth +1;
+  node->left_up->body_id = -1;
   node->left_up->x_lim = node->x_lim - pow_2[node->left_up->depth];
   node->left_up->y_lim =  node->y_lim + pow_2[node->left_up->depth];
   node->left_up-> width = pow_2[node->depth];
@@ -116,7 +124,7 @@ void create_children(node_t* node, double * pow_2){
 
 }
 //modify what node we are using (ie pointing to)
-void insert(node_t **node, double x_pos, double y_pos, double mass, double* pow_2){
+void insert(node_t **node, double x_pos, double y_pos, double mass, double* pow_2, int id){
   // inserts given bodyin tree, creating new nodes if necessary such that
   //every external node (leaf) contains only one body.
   //each node represents a quadrant and contains coordinates of
@@ -130,6 +138,7 @@ void insert(node_t **node, double x_pos, double y_pos, double mass, double* pow_
     (*node)-> cm_x = x_pos;
     (*node)-> cm_y = y_pos;
     (*node)-> tot_mass = mass;
+    (*node)->body_id= id;
 
   }else{
     /*The node contains a body.
@@ -167,7 +176,7 @@ void insert(node_t **node, double x_pos, double y_pos, double mass, double* pow_
           break;
       }
       //insert with correct node
-      insert(node, x_pos, y_pos, mass, pow_2);
+      insert(node, x_pos, y_pos, mass, pow_2, id);
     }else{
     //The node has mass but no children hence its a leaf
     //If it is an external node (leafs) we have
@@ -183,11 +192,13 @@ void insert(node_t **node, double x_pos, double y_pos, double mass, double* pow_
       //save position in the tree
       node_t ** parent_node = node;
       //insert particle that was already in node
-      insert(parent_node, (*node)->cm_x, (*node)->cm_y, mass_in_node, pow_2);
-      printf("We inserted particle \n");
+      insert(parent_node, (*node)->cm_x, (*node)->cm_y, mass_in_node, pow_2,
+      (*node)->body_id);
+      printf("We pushed particle that was already on the node\n");
+      (*node)->body_id = -1;
       print_qtree((*node));
       //try inserting particle i again
-      insert(node, x_pos, y_pos, mass, pow_2);
+      insert(node, x_pos, y_pos, mass, pow_2, id);
       printf("We inserted particle i \n");
       print_qtree((*node));
       }
@@ -263,8 +274,10 @@ int main(int argc, char const *args[]){
   //we pass a pointer to the node since we want to
   //modify what node we are using (ie pointing to)
   printf("inserting nodes in the tree...\n");
+  int id=-1;
   for(int i=0; i<N; i++){
-    insert(&root ,arr[i][POS_X], arr[i][POS_Y], arr[i][MASS], pow_2);
+    id = i;
+    insert(&root ,arr[i][POS_X], arr[i][POS_Y], arr[i][MASS], pow_2, id);
   }
   clock_t end = clock();
   printf("Time: %lu \n", end - begin);
