@@ -185,8 +185,8 @@ void insert(node_t **node, double x_pos, double y_pos, double mass, double* pow_
     //If it is an external node (leafs) we have
     //to create new children (furhter subdivide the space)
       create_children((*node), pow_2);
-      printf("We created children\n");
-      print_qtree((*node));
+      //printf("We created children\n");
+      //print_qtree((*node));
       //insert particle that was occupying the leaf, it will go to appropiate
       //quadrant
       double mass_in_node = (*node)->tot_mass;
@@ -197,13 +197,13 @@ void insert(node_t **node, double x_pos, double y_pos, double mass, double* pow_
       //insert particle that was already in node
       insert(parent_node, (*node)->cm_x, (*node)->cm_y, mass_in_node, pow_2,
       (*node)->body_id);
-      printf("We pushed particle that was already on the node\n");
+      //printf("We pushed particle that was already on the node\n");
       (*node)->body_id = -1;
-      print_qtree((*node));
+      //print_qtree((*node));
       //try inserting particle i again
       insert(node, x_pos, y_pos, mass, pow_2, id);
-      printf("We inserted particle i \n");
-      print_qtree((*node));
+      //printf("We inserted particle i \n");
+      //print_qtree((*node));
       }
     }
     return;
@@ -384,8 +384,8 @@ int main(int argc, char const *args[]){
     printf("particle %d: m = %lf, (%lf,%lf) \n", i, arr[i][MASS],
     arr[i][POS_X], arr[i][POS_Y]);
   }
-  printf("Printing tree .. \n");
-  print_qtree(root);
+  //printf("Printing tree .. \n");
+  //print_qtree(root);
 
   //Calculate forces
   for(int i=0; i <N; i ++){
