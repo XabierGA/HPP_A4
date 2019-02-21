@@ -205,7 +205,39 @@ void insert(node_t **node, double x_pos, double y_pos, double mass, double* pow_
     }
     return;
   }
-
+void delete_tree(node_t** node){
+  if((*node)== NULL){return;}
+  //If you can go to a child, ie child not null
+  //go to it and call the function again
+  if((*node)->right_up){
+    delete_tree(&(*node)->right_up);
+  }
+  if((*node)->right_down){
+    delete_tree(&(*node)->right_down);
+  }
+  if((*node)->left_up){
+    delete_tree(&(*node)->left_up);
+  }
+  if((*node)->left_down){
+    delete_tree(&(*node)->left_down);
+  }
+  //everything is NULL so we can free the node
+  printf("Freeing node:\n");
+  printf("Depth: %d, id:%d, total mass: %lf, cm: (%lf, %lf) limits: (%lf,%lf)\t",
+  (*node)->depth,
+  (*node)->body_id,
+  (*node)->tot_mass,
+  (*node)->cm_x, (*node)->cm_y,
+  (*node)->x_lim, (*node)->y_lim);
+  printf("\n\n\n");
+  free((*node)->right_up);
+  free((*node)->right_down);
+  free((*node)->left_up);
+  free((*node)->left_down);
+  free((*node));
+  (*node)=NULL;
+  return;
+}
 int main(int argc, char const *args[]){
 
   if (argc!=7){
@@ -224,7 +256,6 @@ int main(int argc, char const *args[]){
   const double theta_max = atof(args[5]);
 
   //Read the file with initial conditions
-
   FILE *file;
   file = fopen(file_name , "rb");
   /*maybe in this case we could allocate memory for this
@@ -288,6 +319,7 @@ int main(int argc, char const *args[]){
   }
   printf("Printing tree .. \n");
   print_qtree(root);
+  delete_tree(&root);
   return 0;
 }
 
