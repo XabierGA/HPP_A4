@@ -2,15 +2,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 
 #define POS_X  0
 #define POS_Y 1
 #define MASS 2
 
+double total_acc_x =0;
+double total_acc_y =0;
+const double epsilon_0 = 0.001;
 
-/*
-TO DO falta free and delete treee bla bla
-*/
+
 //declare node structure (X)
 //maybe good idea is to compact it! (ie no padding)
 typedef struct tree_node{
@@ -129,6 +131,7 @@ void insert(node_t **node, double x_pos, double y_pos, double mass, double* pow_
   //every external node (leaf) contains only one body.
   //each node represents a quadrant and contains coordinates of
   //its center of mass and total mass within the quadrant.
+  // N
 
   if((*node) == NULL){ printf("ERROR: Given node is NULL"); return;}
 
@@ -222,14 +225,6 @@ void delete_tree(node_t** node){
     delete_tree(&(*node)->left_down);
   }
   //everything is NULL so we can free the node
-  printf("Freeing node:\n");
-  printf("Depth: %d, id:%d, total mass: %lf, cm: (%lf, %lf) limits: (%lf,%lf)\t",
-  (*node)->depth,
-  (*node)->body_id,
-  (*node)->tot_mass,
-  (*node)->cm_x, (*node)->cm_y,
-  (*node)->x_lim, (*node)->y_lim);
-  printf("\n\n\n");
   free((*node)->right_up);
   free((*node)->right_down);
   free((*node)->left_up);
@@ -238,6 +233,81 @@ void delete_tree(node_t** node){
   (*node)=NULL;
   return;
 }
+
+void get_acc_on_body(double pos_x, double pos_y, node_t ** node, double theta_max, double G){
+  /* this function transverses the tree from the given node and adds the resulting
+  accelerations over given particle to two global variables total_acc_x and total_acc_x
+
+  We follow the following algorithm:
+
+      1. If the current node is an external node (and it is not body b),
+      calculate the force exerted by the current node on b,
+      and add this amount to b's net force.
+
+      2. Otherwise, calculate the ratio s / d. If s / d < θ,
+      treat this internal node as a single body, and calculate the force it
+      exerts on body b, and add this amount to b's net force.
+
+      3. Otherwise, run the procedure recursively on each of the current
+      node's children.
+   */
+
+  //Check if we are on external node
+  if((*node)->right_up == NULL){
+    /*We are on external node, if its not the particle itself we proceed
+    to add it to the sum of accelerations
+    */
+    /*calculate distance from prt i to cm */
+    double x_direction = pos_x - (*node)->cm_x;
+    double y_direction = pos_y - (*node)->cm_y;
+    double dist_to_node = sqrt(x_direction*x_direction - y_direction*y_direction);
+    //THIS NEEDS TO GO HUGE PERFOMANCE HIT PROBABLY
+    //FIND THE PARTICLE AND DELETE IT
+    double tol= 1.0e-10; //
+    if((*node)->tot_mass < 0.0 || dist_to_node < tol){
+      printf("The particle is the same, or the node is empty, so we skip it\n");
+      return;
+    }
+    //calculate force
+    double denominator = pow(sqrt(x_direction*x_direction +
+    y_direction*y_direction+epsilon_0),3);
+    total_acc_x += -G* (*node)->tot_mass * x_direction/denominator;
+    total_acc_y += -G* (*node)->tot_mass * y_direction/denominator;
+  }else{
+    //We are an internal node. Check if w/d < theta. If it is we calculate force,
+    //otherwise we go deeper
+    double x_direction = pos_x - (*node)->cm_x;
+    double y_direction = pos_y - (*node)->cm_y;
+    double dist_to_node = sqrt(x_direction*x_direction - y_direction*y_direction);
+    double theta = (*node)->width/dist_to_node;
+
+    if(theta< theta_max){
+      /* we can approximate the force my the center of mass */
+      /* we need to check mass is positive */
+      // NOTE: WE should delete the node containing particle we are
+      //calculating forces over!!
+
+      //treat everything as center of mass and calculate acceleration
+      double denominator = pow(sqrt(x_direction*x_direction +
+      y_direction*y_direction+epsilon_0),3);
+      //add to the global varaibles
+      total_acc_x += -G*x_direction/denominator;
+      total_acc_y = -G*y_direction/denominator;
+      return;
+    }else{
+      /* we need to go deeper in the tree*/
+      if((*node)-> right_up)
+        get_acc_on_body(pos_x, pos_y, &(*node)->right_up, theta_max, G);
+      if((*node)-> right_down)
+        get_acc_on_body(pos_x, pos_y, &(*node)->right_down, theta_max, G);
+      if((*node)-> left_up)
+        get_acc_on_body(pos_x, pos_y, &(*node)->left_up, theta_max, G);
+      if((*node)-> left_down)
+        get_acc_on_body(pos_x, pos_y, &(*node)->left_down, theta_max, G);
+    }
+  }
+}
+
 int main(int argc, char const *args[]){
 
   if (argc!=7){
@@ -246,7 +316,6 @@ int main(int argc, char const *args[]){
     return -1;
   }
   clock_t begin = clock();
-
   char *file_name = args[2];
   const int N = atoi(args[1]);
   const int n_steps = atoi(args[3]);
@@ -254,7 +323,7 @@ int main(int argc, char const *args[]){
   character to double, maybe a single cast would suffice */
   const double delta_t = atof(args[4]);
   const double theta_max = atof(args[5]);
-
+  const double G = 100/(double)N;
   //Read the file with initial conditions
   FILE *file;
   file = fopen(file_name , "rb");
@@ -281,8 +350,6 @@ int main(int argc, char const *args[]){
     arr[i][5] = bright;
   }
   fclose(file);
-  const double G = 100/(double)N;
-  const double epsilon_0 = 0.001;
   //find powers of two so we only have to do it once
   const int K=200;
   double pow_2[K];
@@ -319,93 +386,15 @@ int main(int argc, char const *args[]){
   }
   printf("Printing tree .. \n");
   print_qtree(root);
+
+  //Calculate forces
+  for(int i=0; i <N; i ++){
+    get_acc_on_body(arr[i][0], arr[i][1], &root, theta_max, G);
+    printf("Acceleration on %d: (%lf , %lf ) \n", i, total_acc_x, total_acc_y);
+    total_acc_x=0;
+    total_acc_y=0;
+  }
+
   delete_tree(&root);
   return 0;
 }
-
-  /*
-  void create_children(node_t * node){
-    if(node->right_up != NULL){"L178, create_children. Something went wrong RU children already exist"}
-    //create right up
-    node->right_up=(node_t*)malloc(sizeof(node_t));
-    node->right_up->depth = node->depth +1;
-    node->right_up->x_lim = node->x_lim + pow_2[node->right_up->depth];
-    node->right_up->y_lim =  node->y_lim + pow_2[node->right_up->depth];
-    node->right_up-> width = pow_2[node->depth];
-    node->right_up-> cm_x = 0;
-    node->right_up-> cm_y = 0;
-    node->right_up-> tot_mass = 0;
-    node->right_up->left_down = NULL;
-    node->right_up->left_up = NULL;
-    node->right_up->right_down = NULL;
-    node->right_up->right_up = NULL;
-
-    if(node->right_down != NULL){"L178, create_children. Something went wrong RD children already exist"}
-    //create right down
-    node->right_down=(node_t*)malloc(sizeof(node_t));
-    node->right_down->depth = node->depth +1;
-    node->right_down->x_lim = node->x_lim + pow_2[node->right_down->depth];
-    node->right_down->y_lim =  node->y_lim + pow_2[node->right_down->depth];
-    node->right_down-> width = pow_2[node->depth];
-    node->right_down-> cm_x = 0;
-    node->right_down-> cm_y = 0;
-    node->right_down-> tot_mass = 0;
-    node->right_down->left_down = NULL;
-    node->right_down->left_up = NULL;
-    node->right_down->right_down = NULL;
-    node->right_down->right_up = NULL;
-
-    if(node->left_up != NULL){"L178, create_children. Something went wrong LU children already exist"}
-    //create left up
-    node->left_up=(node_t*)malloc(sizeof(node_t));
-    node->left_up->depth = node->depth +1;
-    node->left_up->x_lim = node->x_lim + pow_2[node->left_up->depth];
-    node->left_up->y_lim =  node->y_lim + pow_2[node->left_up->depth];
-    node->left_up-> width = pow_2[node->depth];
-    node->left_up-> cm_x = 0;
-    node->left_up-> cm_y = 0;
-    node->left_up-> tot_mass = 0;
-    node->left_up->left_down = NULL;
-    node->left_up->left_up = NULL;
-    node->left_up->right_down = NULL;
-    node->left_up->right_up = NULL;
-
-    if(node->left_down != NULL){"L178, create_children. Something went wrong LD children already exist"}
-    //create left down
-    node->left_down=(node_t*)malloc(sizeof(node_t));
-    node->left_down->depth = node->depth +1;
-    node->left_down->x_lim = node->x_lim + pow_2[node->left_down->depth];
-    node->left_down->y_lim =  node->y_lim + pow_2[node->left_down->depth];
-    node->left_down-> width = pow_2[node->depth];
-    node->left_down-> cm_x = 0;
-    node->left_down-> cm_y = 0;
-    node->left_down-> tot_mass = 0;
-    node->left_down->left_down = NULL;
-    node->left_down->left_up = NULL;
-    node->left_down->right_down = NULL;
-    node->left_down->right_up = NULL;
-  }
-
-void print_qtree(node_t * node){
-  if(node == NULL){printf("Tree is empty \n"); return;}
-
-  if(node != NULL){
-    printf("total mass: %lf, cm: (%lf, %lf) limits: (%lf,%lf). body: (%lf, %lf) m- %lf) \t",
-    node->tot_mass,
-    node->cm_x, node->cm_y,
-    node->x_lim, node->x_lim,
-    node->body_node->x_pos, node->body_node->y_pos, node->body_node->mass);
-  }
-  if (node->right_up != NULL) printf("Q1: total mass %lf,", node->right_up->tot_mass);
-  if (node->left_up != NULL) printf("Q2: total mass: %lf,", node->left_up->tot_mass);
-  if (node->left_down != NULL) printf("Q3: total mass: %lf,", node->left_down->tot_mass);
-  if (node->right_down != NULL) printf("Q4: total mass; %lf,", node->right_down->tot_mass);
-  printf("\n");
-
-  if (node->right_up != NULL) print_qtree(node->right_up);
-  if (node->left_up != NULL) print_qtree(node->left_up);
-  if (node->left_down != NULL) print_qtree(node->left_down);
-  if (node->right_down != NULL) print_qtree(node->right_down);
-  return;
-}
-*/
